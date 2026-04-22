@@ -1,0 +1,430 @@
+<!-- interpreter written by elizabeth wolfy -->
+<!DOCTYPE html>
+<html lang=en>
+<head>
+  <!-- license -->
+  <link rel=license href="https://creativecommons.org/licenses/by-nc/4.0/legalcode.txt" />
+  
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Eso Interpreter</title>
+  <style>
+:root {
+  color-scheme: dark;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  padding: 6px;
+  gap: 6px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  box-sizing: border-box;
+}
+
+#stdout, #code {
+  width: 100%;
+  height: 100%;
+  white-space: pre;
+}
+
+#run, #stdin-enter, #stdin {
+  border: none;
+  padding: 3px;
+  box-sizing: border-box;
+}
+
+textarea, #samples {
+  width: 100%;
+  border: none;
+  box-sizing: border-box;
+  padding: 3px;
+  resize: none;
+  outline: none;
+}
+
+#stdin-cont {
+  gap: 6px;
+  display: flex;
+  flex-direction: row;
+  box-sizing: border-box;
+}
+  </style>
+</head>
+<body>
+  <select id=samples>
+    <option value=0 style="display: none" disabled>Code Samples</option>
+  </select>
+  <textarea id=code placeholder="Eso v0.0.2 (Unstable)"></textarea>
+  <button id=run>Run</button>
+  <div id=stdin-cont>
+    <textarea id=stdin placeholder="stdin"></textarea>
+    <button id=stdin-enter>Enter</button>
+  </div>
+  <textarea id=stdout placeholder="stdout is empty" readonly></textarea>
+  <script>
+function stringToEso(str) {
+  if(!str.length) return "";
+  if(str.length===1) return str[0].charCodeAt(0)+"$";
+  const runic = str.split("").map(a => a.charCodeAt(0));
+  let poi = runic[0];
+  let out = runic[0]+"^$";
+  for(let i = 1; i<runic.length; ++i) {
+    const char = runic[i];
+    const diff = char-poi;
+    poi += diff;
+    if(diff>0) {
+      out += diff+"+";
+    } else if(diff<0) {
+      out += (-diff)+"-";
+    }
+    out += (i===runic.length-1?"":"^")+"$";
+  }
+  return out;
+}
+
+function encodeBase64(code) {
+  code = new TextEncoder().encode(code);
+  return code.toBase64({
+    alphabet: "base64url",
+    omitPadding: true
+  });
+}
+function decodeBase64(code) {
+  code = Uint8Array.fromBase64(
+    code,
+    { alphabet: "base64url" }
+  );
+  return new TextDecoder().decode(code);
+}
+
+const elt_code = document.querySelector("#code");
+const elt_run = document.querySelector("#run");
+const elt_stdout = document.querySelector("#stdout");
+const elt_stdin = document.querySelector("#stdin");
+const elt_stdin_e = document.querySelector("#stdin-enter");
+const elt_samples = document.querySelector("#samples");
+
+
+window.onload = () => {
+  /* create code samples */
+  const code_samples = new Map();
+  
+  function createOp(name, code) {
+    const size = ""+(1+code_samples.size);
+    code_samples.set(size, code);
+    elt_samples.options.add(new Option(name, size));
+  }
+  createOp("Hello world", "¢ hello world\n72 101 108 108 111 44 32 87 111 114 108 100 33 13 ^&.[&$1-]v");
+  createOp("Factorial", "¢ factorial (x >= 0)\n? |^~+ ^1-[^&*1-]v #");
+  createOp("Truth-machine", "¢ truth-machine\n?~~ ^#[1#]");
+  createOp("Fibonacci sequence", "¢ fibonacci sequence\n0 1-1?|[&(:&^+^#10$)1-]vvv");
+  createOp("Factorial counting", "¢ factorial counting\n?|1+ ^[^ &&^3>:- ^# 33^$1-^$29+^$29-$ ^~+^1 -[^&*1-]v# 10$ 1-]vv");
+  
+  createOp("Random ASCII sequence", "¢ random ascii sequencea\n1023[0 64[^@*:&+2/]v$ 1-]v");
+  createOp("Simple calculator", atob("oiBzaW1wbGUgY2FsY3VsYXRvcgoKoiBsb29waW5nCjEgWwogIKIgYXNrIGxlZnQtc2lkZQogIDExNl4kNSteJDktXiQxMS1eJDY5LV4kNzYrXiQ3LV4kMSteJDE0K14kNzEtXiQ3MCteJDEwLV4kNS1eJDErXiQ2OS1eJDc5K14kMSteJDExLV4kMTMrXiQxNy1eJDEzK14kMTAtXiQ0Mi1eJDI2LSQKICA/IF4jMTAkCiAgCiAgoiBhc2sgb3BlcmF0aW9uCiAgMTE2XiQ1K14kOS1eJDExLV4kNjktXiQ3OSteJDErXiQxMS1eJDEzK14kMTctXiQxOSteJDExLV4kNiteJDEtXiQ1Mi1eJDI2LSQKICAhIF5+KzEtWyZ2MS1ddiBeJDEwJAogIAogIKIgYXNrIHJpZ2h0LXNpZGUKICAxMTZeJDUrXiQ5LV4kMTEtXiQ2OS1eJDgyK14kOS1eJDItXiQxK14kMTIrXiQ3MS1eJDcwK14kMTAtXiQ1LV4kMSteJDY5LV4kNzkrXiQxK14kMTEtXiQxMyteJDE3LV4kMTMrXiQxMC1eJDQyLV4kMjYtJAogID8gXiMxMCQKICAKICCiIGNoZWNrIG9wZXJhdGlvbgogIDoKICBeNDItflt2ICYqIDBddgogIF40My1+W3YgJisgMF12CiAgXjQ1LX5bdiAmLSAwXXYKICBeNDctflt2ICYvIDBddiCiIGVzbyBkb24ndCBzdXBwb3J0IGZsb2F0cwogIHYKICAKICCiIHNob3cgcmVzdWx0CiAgMTE0XiQxMy1eJDE0K14kMiteJDktXiQ4K14kNTgtXiQyNi0kIwogIDEwXiQkCiAgCiAgoiBjbGVhciBzdGFjayBhbmQgbG9vcAogIFt2XTEKXQ=="));
+  createOp("Guess the number game", atob("oiBpbnRyb2R1Y3Rpb24KMTAzXiQxNCteJDE2LV4kMTQrXiReJDgzLV4kODQrXiQxMi1eJDMtXiQ2OS1eJDc4K14kNyteJAo4LV4kMTEtXiQzK14kMTMrXiQ4Mi1eJDY2K14kMyteJDE1K14kMyteJDE4LV4kXiQ5K14kNzgtXiQKMTYrXiQxNi1eJDY1K14kMTMrXiQxMC1eJDY4LV4kMTkrXiQyLSQxMF4kJAoKoiBsaXZlcwo1CgqiIHRoZSBudW1iZXIgdG8gYmUgZ3Vlc3NlZAowIDE2W15AKjomKzIvXXYgoiBnZW5lcmF0ZSByYW5kb20gbnVtYmVyCgo6MCAxPjI+IDFbdgogIKIgInlvdXIgZ3Vlc3M6ICIKICAxMjFeJDEwLV4kNiteJDMtXiQ4Mi1eJDcxK14kMTQrXiQxNi1eJDE0K14kXiQ1Ny1eJDI2LSQKICAKICA/IKIgdXNlciBndWVzcwogIF4jMTAkIKIgcHJpbnQgbnVtYmVyCiAgCiAgJl46LSCiIGRpZmZlcmVuY2UKICAKICBefl5bdgogICAgoiB0aGUgbnVtYmVycyBhcmUgZXF1YWwKICAgIKIgInlvdSBndWVzc2VkIGl0ISIKICAgIDEyMV4kMTAtXiQ2K14kODUtXiQ3MSteJDE0K14kMTYtXiQxNCteJF4kMTQtXiQxLV4kCiAgICA2OC1eJDczK14kMTErXiQ4My0kMTAkCiAgICAmdgogICAgJiYmMSsmJjAqIKIgc2V0IGxpdmVzIHRvIDAKICAwXXZ+W3YKICAgIKIgdGhlIG51bWJlcnMgYXJlIG5vdCBlcXVhbAogICAgXnwvMSsyLyCiIHNpZ24gWzAsIDFdCiAgICAKICAgIKIgInRoZSBudW1iZXIgaXMgIgogICAgMTE2XiQxMi1eJDMtXiQ2OS1eJDc4K14kNyteJDgtXiQxMS1eJDMrXiQxMyteJDgyLV4kCiAgICA3MyteJDEwK14kODMtJAogICAgXlt2CiAgICAgIKIgInNtYWxsZXIhIgogICAgICAxMTVeJDYtXiQxMi1eJDExK14kXiQ3LV4kMTMrJAogICAgMF12flt2CiAgICAgIKIgImJpZ2dlciEiCiAgICAgIDk4XiQ3K14kMi1eJF4kMi1eJDEzKyQKICAgIDBddgogICAgNDYkMTAkCiAgICAmMS0goiBzdWJ0cmFjdCBsaXZlCiAgICCiICJ4IHJlbWFpbmluZyBsaXZlcy4iCiAgICAmXjE+IKIgY29weSBsaXZlIHRvIHRvcAogICAgIzE3XiQxNSteJDgyK14kMTMtXiQ4K14kMTItXiQ4K14kNSteJDUtXiQ1K14kNy1eJDcxLV4kCiAgICA3NiteJDMtXiQxMyteJDE3LV4kMTQrXiQ2OS0kMTAkCiAgMF12CiAgJl4xPn5+IKIgc2lnbmFsIHRvIGNvbnRpbnVlIG9yIHN0b3AgYmFzZWQgb24gbGl2ZQpdCiYmdnYxPn5bCiAgoiBnYW1lIG92ZXIgbWVzc2FnZQogIDEyMV4kMTAtXiQ2K14kODUtXiQ3NiteJDMrXiQ0K14kMSteJDcyLV4kMTItXiQ4NCteJAogIDEyLV4kMy1eJDY5LV4kNzgrXiQ3K14kOC1eJDExLV4kMyteJDEzK14kODItXiQ4NyteJDIyLV4kCiAgMTgrXiQ1Ny1eJDI2LSQmXiYjCiAgMCoKXXZ2"));
+  createOp("Uwuifier", "¢ uwuifier\n! ^&.[1> ^108-~11*+ ^114-~5*+ ^97-~^[v 97$45$ 0]vv $ 1-]1vv");
+  
+  elt_samples.onchange = () => {
+    elt_code.value = code_samples.get(elt_samples.value)??"";
+    elt_samples.value = "0";
+  }
+  elt_samples.value = "0";
+  
+  const url_params = new URLSearchParams(window.location.search);
+  const code_url = url_params.get("code");
+  if(code_url) elt_code.value = decodeBase64(code_url);
+}
+
+elt_run.onclick = async () => {
+  if(hand_in) hand_in = null;
+  
+  const url_code = encodeBase64(elt_code.value);
+  window.history.replaceState({}, "", "?code="+url_code);
+  
+  elt_stdout.value = "";
+  elt_stdout.value = await eso(elt_code.value);
+}
+
+/* hwndle input */
+let hand_in = null;
+elt_stdin_e.onclick = async () => {
+  if(!hand_in) return;
+  await hand_in(elt_stdin.value);
+  elt_stdin.value = "";
+  // elt_run.disabled = false;
+  hand_in = null;
+}
+function prompt(stdout) {
+  const inpi = /\s|^/.test(stdout.at(-1)??"")?"":" ";
+  elt_stdout.value = stdout+inpi+"[program is waiting for stdin]";
+  // elt_run.disabled = true;
+  return new Promise(res => hand_in = res);
+}
+
+/* eso interpreter */
+function tokenize(code) {
+  const tokens = [];
+  
+  code = code.split("");
+  while(code.length) {
+    if(/\s/.test(code[0])) {
+      let i = 0;
+      while(i<code.length&&/\s/.test(code[i])) ++i;
+      code.splice(0, i);
+      continue;
+    }
+    if(code[0]==="¢") {
+      let i = 0;
+      while(i<code.length&&code[i]!=="\n") ++i;
+      if(code[i]==="\n") ++i;
+      code.splice(0, i);
+      continue;
+    }
+    if(/[0-9]/.test(code[0])) {
+      let i = 0;
+      while(i<code.length&&/[0-9]/.test(code[i])) ++i;
+      const val = code.splice(0, i).join("");
+      tokens.push({ type: "num", val });
+      continue;
+    }
+    if("$#!?+-*/%|~^v&:;.@><o".includes(code[0])) {
+      tokens.push({ type: code[0] });
+      code.splice(0, 1);
+      continue;
+    }
+    
+    if(code[0]==="[") {
+      code.splice(0, 1);
+      let i = 0, depth = 1;
+      while(i<code.length&&depth) {
+        if(code[i]==="[") ++depth;
+        else if(code[i]==="]") --depth;
+        ++i;
+      }
+      const body = "["+code.splice(0, i).join("");
+      if(depth) throw new Error("unmatched pair of brackets → "+body.slice(0, 20));
+      tokens.push({ type: "loop", body: tokenize(body.slice(1, -1)) });
+      continue;
+    }
+    if(code[0]==="(") {
+      code.splice(0, 1);
+      let i = 0, depth = 1;
+      while(i<code.length&&depth) {
+        if(code[i]==="(") ++depth;
+        else if(code[i]===")") --depth;
+        ++i;
+      }
+      const body = "("+code.splice(0, i).join("");
+      if(depth) throw new Error("unmatched pair of parenthesis → "+body.slice(0, 20));
+      tokens.push({ type: "group", body: tokenize(body.slice(1, -1)) });
+      continue;
+    }
+    throw new Error("invalid symbol → "+code[0]);
+  }
+  return tokens;
+}
+
+async function eso(code) {
+  let stdout = "", popst = [];
+  const stack = [];
+  
+  function binop(i) {
+    if(stack.length<2) {
+      throw new Error("expected 2 operands for binary operation.");
+    }
+    stack.push(i(stack.pop(), stack.pop()));
+  }
+  function unaop(i) {
+    if(stack.length<1) {
+      throw new Error("expected a value for unary operation.");
+    }
+    const l = stack.length-1;
+    stack[l] = i(stack[l]);
+  }
+  
+  async function interpret(op) {
+    switch(op.type) {
+      // language
+      case "num": {
+        stack.push(BigInt(parseInt(op.val)));
+        return;
+      }
+      case "loop": {
+        let fuel = 8192;
+        while(fuel&&stack.length&&stack[stack.length-1]) {
+          for(const op2 of op.body) await interpret(op2);
+          // --fuel;
+        }
+        if(!fuel) throw new Error("not enough fuel.");
+        return;
+      }
+      case "group": {
+        let i = 1, j = popst.length+1;
+        const backup = popst;
+        popst = [];
+        for(const op2 of op.body) {
+          await interpret(op2);
+        }
+        popst = backup;
+        break;
+      }
+      
+      // stdin
+      case "?": {
+        let u;
+        try {
+          u = BigInt(await prompt(stdout));
+        } catch(e) {
+          u = 0n;
+        }
+        stack.push(u);
+        break;
+      }
+      case "!": {
+        let u = await prompt(stdout);
+        if(!u.length) {
+          stack.push(0n);
+          break;
+        }
+        for(let i = 0; i<u.length; ++i) {
+          stack.push(BigInt(u.codePointAt(i)));
+        }
+        stack.push(BigInt(u.length));
+        break;
+      }
+      
+      // stdout
+      case "#": {
+        if(stack.length) {
+          stdout += stack.pop();
+          break;
+        }
+        throw new Error("expected value to print.");
+      }
+      case "o": {
+        stdout += stack.join(" ");
+        return;
+      }
+      case "$": {
+        if(stack.length) {
+          stdout += String.fromCodePoint(Number(stack.pop()));
+          break;
+        }
+        throw new Error("expected value to print.");
+      }
+      
+      // operations
+      case "+": binop((i, j) => i+j); break;
+      case "-": binop((i, j) => j-i); break;
+      case "*": binop((i, j) => i*j); break;
+      case "/": binop((i, j) => j/i); break;
+      case "%": binop((i, j) => j%i); break;
+      case "~": unaop(i => i===0n?1n:0n); break;
+      case "|": unaop(i => i<0n?-i:i); break;
+      
+      // stack
+      case "@": stack.push(BigInt((2*Math.random())|0)); break;
+      case "v": stack.pop(); break;
+      case "&": {
+        if(!stack.length) {
+          throw new Error("expected value to pop.");
+        }
+        popst.push(stack.pop());
+        return;
+      }
+      case "^": {
+        if(!stack.length) {
+          throw new Error("expected value to duplicate.");
+        }
+        stack.push(stack[stack.length-1]);
+        break;
+      }
+      case ":": {
+        if(stack.length<2) {
+          throw new Error("expected at least 2 values to swap.");
+        }
+        const l = stack.length-1;
+        const u = stack[l];
+        stack[l] = stack[l-1];
+        stack[l-1] = u;
+        break;
+      }
+      case ";": {
+        if(stack.length<2) {
+          throw new Error("expected at least 2 values.");
+        }
+        const d1 = Number(stack.pop());
+        const d2 = Number(stack.pop());
+        const l = stack.length;
+        if(l+1<=d1||l+1<=d2||d1<1||d2<1||d1===d2) {
+          throw new Error("can not swap at depth "+d1+" and "+d2);
+        }
+        const idx0 = l-d1, idx1 = l-d2;
+        const u = stack[idx0];
+        stack[idx0] = stack[idx1];
+        stack[idx1] = u;
+        break;
+      }
+      case ".": {
+        if(!stack.length) {
+          throw new Error("expected value to reverse.");
+        }
+        const size = Number(stack.pop());
+        if(stack.length<size) {
+          throw new Error("expected "+size+" values to reverse.");
+        }
+        const original = stack.splice(stack.length-size, stack.length);
+        stack.push(...original.reverse());
+        break;
+      }
+      case ">": {
+        if(!stack.length) {
+          throw new Error("expected value to depth.");
+        }
+        const depth = Number(stack.pop()+1n);
+        const l = stack.length;
+        if(depth>l) {
+          throw new Error("expected at least "+depth+" to push up.");
+        }
+        stack.push(...stack.splice(l-depth, 1));
+        break;
+      }
+      case "<": {
+        if(!stack.length) {
+          throw new Error("expected value to depth.");
+        }
+        const depth = Number(stack.pop()+1n);
+        const l = stack.length;
+        if(depth>l) {
+          throw new Error("expected at least "+depth+" to push down.");
+        }
+        stack.splice(l-depth, 0, stack.pop());
+        break;
+      }
+    }
+    if(popst.length) {
+      stack.push(...popst.splice(0).reverse());
+    }
+  }
+  
+  try {
+    for(const op of tokenize(code)) await interpret(op);
+  } catch(e) {
+    if(!stdout.length) return e.toString();
+    return stdout+"\n\n――――――――――――――――――――\n\n"+e.toString();
+  }
+  if(!stdout.length) return "closed with stack at "+stack.length;
+  return stdout+"\n\n――――――――――――――――――――\n\nclosed with stack at "+stack.length;
+}
+  </script>
+</body>
+</html>
