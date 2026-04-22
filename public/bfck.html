@@ -88,6 +88,12 @@ const elt_stdout = document.querySelector("#stdout");
 const elt_stdin = document.querySelector("#stdin");
 const elt_stdin_e = document.querySelector("#stdin-enter");
 
+window.onload = () => {
+  const url_params = new URLSearchParams(window.location.search);
+  const code_url = url_params.get("code");
+  if(code_url) elt_code.value = decodeBase64(code_url);
+}
+
 elt_run.onclick = async () => {
   if(hand_in) hand_in = null;
   
