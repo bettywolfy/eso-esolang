@@ -26,8 +26,8 @@ Eso is a stack-based esoteric language, use single-character commands to manipul
   > integer only; use `n 0:-` for negative values
 
 ### code group
-`(...)` execute once; if a `&` is used before, it "eats" the items stored until the last command is executed
-`[...]` execute while there is still items on stack and the current item on top of stack is not 0
+* `(...)` execute once; if a `&` is used before, it "eats" the items stored until the last command is executed
+* `[...]` execute while there is still items on stack and the current item on top of stack is not 0
 
 ## examples
 
