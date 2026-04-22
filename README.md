@@ -17,6 +17,11 @@ Eso is a stack-based esoteric language, use single-character commands to manipul
 * `>` move a item to top of stack with depth based on last item of stack
 * `<` move a item to bottom of stack with depth based on last item of stack
 
+### arithmetic
+* `|` turn the top of stack stack into its absolute value
+* `~` turn the top of stack into 1 if it is 0, 0 otherwise
+* `+`, `-`, `/`, `*`, `%` do the operation to the last 2 items on stack
+
 ### create value
 * `@` push into stack a 0 or 1 randomly
 * `.` reverse the order of the last n items of the stack with n being the last item on stack
