@@ -1,0 +1,204 @@
+<!-- interpreter written by elizabeth wolfy -->
+<!DOCTYPE html>
+<html lang=en>
+<head>
+  <!-- license -->
+  <link rel=license href="https://creativecommons.org/licenses/by-nc/4.0/legalcode.txt" />
+  
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Brainf*ck Interpreter</title>
+  <style>
+:root {
+  color-scheme: dark;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  padding: 6px;
+  gap: 6px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  box-sizing: border-box;
+}
+
+#stdout, #code {
+  width: 100%;
+  height: 100%;
+  white-space: pre;
+}
+
+#run, #stdin-enter, #stdin {
+  border: none;
+  padding: 3px;
+  box-sizing: border-box;
+}
+
+textarea {
+  width: 100%;
+  border: none;
+  box-sizing: border-box;
+  padding: 3px;
+  resize: none;
+  outline: none;
+}
+
+#stdin-cont {
+  gap: 6px;
+  display: flex;
+  flex-direction: row;
+  box-sizing: border-box;
+}
+  </style>
+</head>
+<body>
+  <textarea id=code placeholder="brainf*ck by Urban Müller"></textarea>
+  <button id=run>Run</button>
+  <div id=stdin-cont>
+    <textarea id=stdin placeholder="stdin"></textarea>
+    <button id=stdin-enter>Enter</button>
+  </div>
+  <textarea id=stdout placeholder="stdout is empty" readonly></textarea>
+  <script>
+function encodeBase64(code) {
+  code = new TextEncoder().encode(code);
+  return code.toBase64({
+    alphabet: "base64url",
+    omitPadding: true
+  });
+}
+function decodeBase64(code) {
+  code = Uint8Array.fromBase64(
+    code,
+    { alphabet: "base64url" }
+  );
+  return new TextDecoder().decode(code);
+}
+
+const elt_code = document.querySelector("#code");
+const elt_run = document.querySelector("#run");
+const elt_stdout = document.querySelector("#stdout");
+const elt_stdin = document.querySelector("#stdin");
+const elt_stdin_e = document.querySelector("#stdin-enter");
+
+elt_run.onclick = async () => {
+  if(hand_in) hand_in = null;
+  
+  const url_code = encodeBase64(elt_code.value);
+  window.history.replaceState({}, "", "?code="+url_code);
+  
+  elt_stdout.value = "";
+  elt_stdout.value = await bfck(elt_code.value);
+}
+
+/* hwndle input */
+let hand_in = null;
+elt_stdin_e.onclick = async () => {
+  if(!hand_in) return;
+  await hand_in(elt_stdin.value);
+  elt_stdin.value = "";
+  // elt_run.disabled = false;
+  hand_in = null;
+}
+function prompt(stdout) {
+  const inpi = /\s|^/.test(stdout.at(-1)??"")?"":" ";
+  elt_stdout.value = stdout+inpi+"[program is waiting for stdin]";
+  // elt_run.disabled = true;
+  return new Promise(res => hand_in = res);
+}
+
+/* bfck interpreter */
+function tokenize(code) {
+  const tokens = [];
+  
+  code = code.split("");
+  while(code.length) {
+    if("+-<>.,".includes(code[0])) {
+      tokens.push({ type: code[0] });
+      code.splice(0, 1);
+      continue;
+    }
+    
+    if(code[0]==="[") {
+      code.splice(0, 1);
+      let i = 0, depth = 1;
+      while(i<code.length&&depth) {
+        if(code[i]==="[") ++depth;
+        else if(code[i]==="]") --depth;
+        ++i;
+      }
+      const body = "["+code.splice(0, i).join("");
+      if(depth) throw new Error("unmatched pair of brackets → "+body.slice(0, 20));
+      tokens.push({ type: "loop", body: tokenize(body.slice(1, -1)) });
+      continue;
+    }
+    
+    let i = 0;
+    while(i<code.length&&code[i]!=="\n") ++i;
+    if(code[i]==="\n") ++i;
+    code.splice(0, i);
+  }
+  return tokens;
+}
+
+async function bfck(code) {
+  let stdout = "", ptr = 0;
+  const mem = new Uint8Array(2048);
+  async function interpret(op) {
+    switch(op.type) {
+      // memory
+      case "+": case "-": {
+        mem[ptr] += op.type==="+"?1:-1;
+        break;
+      }
+      case "<": case ">": {
+        const dir = op.type===">"?1:-1;
+        ptr = (ptr+dir)&2047;
+        break;
+      }
+      
+      case "loop": {
+        while(mem[ptr]) {
+          for(const op2 of op.body)
+            await interpret(op2);
+        }
+        break;
+      }
+      
+      case ",": {
+        let u = await prompt(stdout);
+        mem[ptr] = u.charCodeAt(0);
+        break;
+      }
+      case ".": {
+        stdout += String.fromCharCode(mem[ptr]);
+        break;
+      }
+    }
+  }
+  for(const op of tokenize(code)) {
+    await interpret(op);
+  }
+  let found = false;
+  for(let i = 0; i<2048; ++i) {
+    if(mem[i]) {
+      if(!found) {
+        stdout += "\n\n――――――――――――――――――――\n\n";
+        found = true;
+      }
+      stdout += `[${i}] → ${mem[i]}`;
+      if(i!==2047) stdout += "\n";
+    }
+  }
+  return stdout;
+}
+  </script>
+</body>
+</html>
