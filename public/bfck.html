@@ -148,6 +148,7 @@ function tokenize(code) {
     
     let i = 0;
     while(i<code.length&&code[i]!=="\n") ++i;
+    if(code[i]==="\n") ++i;
     code.splice(0, i);
     continue;
   }
