@@ -18,7 +18,7 @@ Eso is a stack-based esoteric language, use single-character commands to manipul
 * `^` duplicates the top of stack
 * `v` pops the top of stack
 * `&` pops the top of stack, wait for a **valid** command to be executed and then push the stored items back into the top
-  > `&`, `[...]` and pushing a number into stack are not valid commands.
+  > `&`, `[...]` and pushing a number into stack are not valid commands\
   > `&` can be stacked: `0 2 3 &&1+` → `1 2 3`
 * `$` pops and print the top of the stack as a Unicode character
 * `#` pops and print the top of the stack as a decimal
@@ -27,14 +27,14 @@ Eso is a stack-based esoteric language, use single-character commands to manipul
   > `A B 0 0 4 3 ;` → `B A 0 0`
 * `>` move a item to top of stack with depth based on last item of stack
   > `A 0 0 3 >` → `0 0 A`
-* `<` move a item to bottom of stack with depth based on last item of stack.
+* `<` move a item to bottom of stack with depth based on last item of stack
   > `0 0 A 3 <` → `A 0 0`
 
 ### arithmetic
 * `|` turn the top of stack stack into its absolute value
 * `~` turn the top of stack into 1 if it is 0, 0 otherwise
 * `+`, `-`, `/`, `*`, `%` do the operation to the last 2 items on stack
-  > `3 4 +` → `7`
+  > `3 4 +` → `7`\
   > `6 2 /` → `3`
 
 ### code group
