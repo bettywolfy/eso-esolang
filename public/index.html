@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js" integrity="sha512-qtX0GLM3qX8rxJN1gyDfcnMFFrKvixfoEOwbBib9VafR5vbChV5LeE5wSI/x+IlCkTY5ZFddFDCCfaVJJNnuKQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <title>Eso Interpreter</title>
   <style>
 :root {
@@ -66,39 +67,17 @@ textarea, #samples {
   </div>
   <textarea id=stdout placeholder="stdout is empty" readonly></textarea>
   <script>
-function stringToEso(str) {
-  if(!str.length) return "";
-  if(str.length===1) return str[0].charCodeAt(0)+"$";
-  const runic = str.split("").map(a => a.charCodeAt(0));
-  let poi = runic[0];
-  let out = runic[0]+"^$";
-  for(let i = 1; i<runic.length; ++i) {
-    const char = runic[i];
-    const diff = char-poi;
-    poi += diff;
-    if(diff>0) {
-      out += diff+"+";
-    } else if(diff<0) {
-      out += (-diff)+"-";
-    }
-    out += (i===runic.length-1?"":"^")+"$";
-  }
-  return out;
-}
-
 function encodeBase64(code) {
-  code = new TextEncoder().encode(code);
-  return code.toBase64({
-    alphabet: "base64url",
-    omitPadding: true
-  });
+  return LZString.compressToBase64(code)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
 }
 function decodeBase64(code) {
-  code = Uint8Array.fromBase64(
-    code,
-    { alphabet: "base64url" }
-  );
-  return new TextDecoder().decode(code);
+  code = code
+    .replaceAll("-", "+")
+    .replaceAll("_", "/");
+  return LZString.decompressFromBase64(code);
 }
 
 const elt_code = document.querySelector("#code");
@@ -108,10 +87,9 @@ const elt_stdin = document.querySelector("#stdin");
 const elt_stdin_e = document.querySelector("#stdin-enter");
 const elt_samples = document.querySelector("#samples");
 
-
 window.onload = () => {
   /* changelog */
-  elt_code.placeholder = "Eso v0.0.3 (Unstable)\n\n* Changed the way the '>' and '<' operator work\n* 'Guess the number' sample updated";
+  elt_code.placeholder = "Eso v0.0.4 (Unstable)\n\n* Data is now compressed in URI (using lz-string)";
   
   /* create code samples */
   const code_samples = new Map();
@@ -128,8 +106,8 @@ window.onload = () => {
   createOp("Factorial counting", "¢ factorial counting\n?|1+ ^[^ &&^4>:- ^# 33^$1-^$29+^$29-$ ^~+^1 -[^&*1-]v# 10$ 1-]vv");
   
   createOp("Random ASCII sequence", "¢ random ascii sequencea\n1023[0 64[^@*:&+2/]v$ 1-]v");
-  createOp("Simple calculator", atob("oiBzaW1wbGUgY2FsY3VsYXRvcgoKoiBsb29waW5nCjEgWwogIKIgYXNrIGxlZnQtc2lkZQogIDExNl4kNSteJDktXiQxMS1eJDY5LV4kNzYrXiQ3LV4kMSteJDE0K14kNzEtXiQ3MCteJDEwLV4kNS1eJDErXiQ2OS1eJDc5K14kMSteJDExLV4kMTMrXiQxNy1eJDEzK14kMTAtXiQ0Mi1eJDI2LSQKICA/IF4jMTAkCiAgCiAgoiBhc2sgb3BlcmF0aW9uCiAgMTE2XiQ1K14kOS1eJDExLV4kNjktXiQ3OSteJDErXiQxMS1eJDEzK14kMTctXiQxOSteJDExLV4kNiteJDEtXiQ1Mi1eJDI2LSQKICAhIF5+KzEtWyZ2MS1ddiBeJDEwJAogIAogIKIgYXNrIHJpZ2h0LXNpZGUKICAxMTZeJDUrXiQ5LV4kMTEtXiQ2OS1eJDgyK14kOS1eJDItXiQxK14kMTIrXiQ3MS1eJDcwK14kMTAtXiQ1LV4kMSteJDY5LV4kNzkrXiQxK14kMTEtXiQxMyteJDE3LV4kMTMrXiQxMC1eJDQyLV4kMjYtJAogID8gXiMxMCQKICAKICCiIGNoZWNrIG9wZXJhdGlvbgogIDoKICBeNDItflt2ICYqIDBddgogIF40My1+W3YgJisgMF12CiAgXjQ1LX5bdiAmLSAwXXYKICBeNDctflt2ICYvIDBddiCiIGVzbyBkb24ndCBzdXBwb3J0IGZsb2F0cwogIHYKICAKICCiIHNob3cgcmVzdWx0CiAgMTE0XiQxMy1eJDE0K14kMiteJDktXiQ4K14kNTgtXiQyNi0kIwogIDEwXiQkCiAgCiAgoiBjbGVhciBzdGFjayBhbmQgbG9vcAogIFt2XTEKXQ=="));
-  createOp("Guess the number game", decodeBase64("wqIgZ3Vlc3MgdGhlIG51bWJlciBnYW1lCgoxIDE2W15AKjomKzIvXXYgwqIgbnVtYmVyIHRvIGJlIGd1ZXNzZWQKCjQgwqIgbGl2ZXMKCsKiIGludHJvZHVjdGlvbgoxMDMkMTE3JDEwMSQxMTVeJCQzMiQxMTYkMTA0JDEwMSQzMiQxMTAkMTE3JDEwOSQ5OCQxMDEkMTE0JDMyJDk4JDEwMSQKMTE2JDExOSQxMDFeJCQxMTAkMzIkNDkkMzIkOTckMTEwJDEwMCQzMiQ1MSQ1MCQzMyQxMCQxMjEkMTExJDExNyQzMiQKMTA0JDk3JDExOCQxMDEkMzIkIF4jIDMyJDEwOCQxMDUkMTE4JDEwMSQxMTUkNDYkMTBeJCQKCjEgwqIgZmxhZyBmb3IgZW5kIGdhbWUKClsKICDCoiBhc2sgZm9yIGlucHV0CiAgMTE2JDEyMSQxMTIkMTAxJDMyJDEyMSQxMTEkMTE3JDExNCQzMiQxMDMkMTE3JDEwMSQxMTVeJCQ1OCQzMiQKICA_IF4jMTAkIMKiIHByaW50IGlucHV0CiAgCiAgJiYmXjQ-LSDCoiBkaWZmZXJlbmNlCiAgCiAgXn5eW3YKICAgIMKiIHBsYXllciBndWVzc2VkIHJpZ2h0CiAgICAxMjEkMTExJDExNyQzMiQxMDMkMTE3JDEwMSQxMTVeJCQxMDEkMTAwJDMyJDExNiQxMDQkMTAxJDMyJDExMCQKICAgIDExNyQxMDkkOTgkMTAxJDExNCQzMyQxMCQKICAgICYmMCogwqIgZW5kIGdhbWUgc29vbmVyCiAgICAmdgogIDBddn5bdgogICAgwqIgZGlkIG5vdCBndWVzc2VkIHJpZ2h0LCBjb21wYXJlCiAgICAKICAgIF58LzErMi8gwqIgdHVybiBudW1iZXIgc2lnbiBpbnRvIDAgKC0xKSAxICgxKQogICAgCiAgICDCoiBwcmludCBjb21wYXJpc29uCiAgICAxMTYkMTA0JDEwMSQzMiQxMTAkMTE3JDEwOSQ5OCQxMDEkMTE0JDMyJDEwNSQxMTUkMzIkCiAgICBeW3YgMTE1JDEwOSQ5NyQxMDheJCQgMF12flt2IDk4JDEwNSQxMDNeJCQgMF12CiAgICAxMDEkMTE0JDQ2JDEwJAogICAgCiAgICDCoiBzdWJ0cmFjdCBhbmQgcHJpbnQgcmVtYWluaW5nIGxpdmVzCiAgICAmKDEtIF4jIDMyJDExNCQxMDEkMTA5JDk3JDEwNSQxMTAkMTA1JDExMCQxMDMkMzIkMTA4JDEwNSQxMTgkMTAxJAogICAgMTE1JDQ2JDEwXiQkKQogICAgCiAgICAmXjI-fn4qIMKiIGVuZCBpZiBsaXZlIGlzIDAKICAwXXYKXXYKflt2CiAgwqIgcHJpbnQgZ2FtZSBvdmVyCiAgMTIxJDExMSQxMTckMzIkMTA4JDExMSQxMTUkMTE2JDMzJDEwJDExNiQxMDQkMTAxJDMyJDExMCQxMTckMTA5JDk4JAogIDEwMSQxMTQkMzIkMTE5JDk3JDExNSQ1OCQzMiQgXiMgMTAkCjBddnY"));
+  createOp("Simple calculator", decodeBase64("EUAgzglgtgDgNgUxAYwIZ2QVzqgLgewCcAoY0OffGCAOwHNiBGEAbWJBFFTAGsREAZrgC0kACYJ2IRowBsAPQAkAVgDUSgJzClM7YtlalAdlnrFRvYzOMALGaOM9RgAzXne5ZbMGnG69ccdAGZrC2C3PRsAJj0o2WFFKQB-EHkAYkZnRI4pLl4QKgRCPAh8GikZBRUzQ0VdJR9jPx0AyxCdMLrmusD9aw8YpTiEqQBCVIA_VUcWADIAN0cAXXnUuqypXJBuPkIIOgALEXFJDkqlNU1LXsbFAA4omtivHUfjXpcIi5f9WqNuqw6XqMdp1Togr6KaKxeLZEApdKZOFbZAHBDIPiFYq4UrlDgALik8mhExYq1mACoQM4VkSbEFhKTyapqbSOMTPEyQLNhKz5nSLFzZgB6PmcEAIMD4EBiMoAclw4EwMBgREVAgoeDAUn5OQ4oDAB3wAHcQIRJdhcBVbMFLHYhk8lHczMo7jCEmkKs4lMj9ShEKhCOBcKgMdsaGJ-JQYFIyUtGMQlkA"));
+  createOp("Guess the number game", decodeBase64("EUAg5grgpgzjIBcAWUQDsIFsBGUBO4AhplAFCkCMIFAbANoB6AAgFQBcAZANQBMA9AF0AbiFAYc-RAHsQucNDhQAJuQAsokABsAlkNjlQ2tAjxSlEAMYJtUtJQAMAZgAkFCgHZX9iq4oBWBmdnRx5fGi9VLx8Q33tfTwp7AE5nJIAOKN9ImPTMylpfFMSKQNjg0NUUnITErziYvx8_epdaih4fN06PcucHSKSajOLekAYAYhAYxOH7P19Z7vnVcMTS8ipQADNNQjAQLakCKDQlIhJyOlIQDUIYAGsDo5AjAAcIBGvqAvbu0JHph1fN0atl_k54pk3AEgn4MjEvgB-MbjWoaV54IwIF5od6fG5fDhEhiqAB8AFoNEptFstvgThYyASbgwAH4MOhCL43UCvXYAT0kkFgMGUIExYCQ-Ju1CBXUh0whbgS3l8MKh9nq_x-9kiAO1cW53xVKVyIzc2VahplICJ9hYGhOZzAxFQMCktnwRo4XJu9mErM5RtA1LOaCk2OFijOEqlABoQBYpJhXoQ8EyZUaGAAfPgUXh8DQICB4NDoLC4AgwbRgMtYmT2EAACnJFAAlNRm-2jcGQBisYnk6nMe67Da3KtdZlpm0eolTYssr1EvNob0s5zvqvkqkVWlSiB_UJAyIzXMvI4D0ejeaKJEVl4-jbezAINgTIQrCBCKc-5jjOKUCYIQRhGPsOh6DA3pNhQlITFM2p6qq867l4q5tOebhxIkLiKrM6GLje_jOA-axBG2PY2hwDA8KSrKsg6oBOi8WxaLoqDaPA9hfNewikCeXy8v-kauiAUh6HgXy_MCCrgsMbhqmEwRWkpiRIdEBqQihuRSchd7LhQpo1PMcKjPBtSkEeQhAA"));
   createOp("Uwuifier", "¢ uwuifier\n! ^&.[2> ^108-~11*+ ^114-~5*+ ^97-~^[v 97$45$ 0]vv $ 1-]1vv");
   
   elt_samples.onchange = () => {
