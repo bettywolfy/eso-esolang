@@ -11,6 +11,10 @@
   color-scheme: dark;
 }
 
+*, body {
+  box-sizing: border-box;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -23,35 +27,50 @@ body {
   flex-direction: column;
   height: 100vh;
   height: 100dvh;
-  box-sizing: border-box;
 }
 
-#stdout, #code {
+#code, #stdout {
   width: 100%;
-  height: 100%;
+  flex: 1;
   white-space: pre;
 }
 
-#run, #stdin-enter, #stdin {
-  border: none;
-  padding: 3px;
-  box-sizing: border-box;
+#code {
+  background: black;
+  color: lightgray;
+  font-family: monospace;
 }
 
-textarea, #samples {
-  width: 100%;
-  border: none;
-  box-sizing: border-box;
+#code::placeholder {
+  white-space: pre-wrap;
+}
+
+#samples, #status,
+#stdin, #stdin-enter, textarea {
+  border: 0;
   padding: 3px;
+}
+
+#run, #samples {
+  border: 0;
+  width: 100%;
+  padding: 6px;
+}
+
+#stdin-enter {
+  width: 15%;
+}
+
+#samples, textarea {
+  width: 100%;
   resize: none;
-  outline: none;
+  outline: 0;
 }
 
 #stdin-cont {
   gap: 6px;
   display: flex;
   flex-direction: row;
-  box-sizing: border-box;
 }
   </style>
 </head>
@@ -66,6 +85,7 @@ textarea, #samples {
     <button id=stdin-enter>Enter</button>
   </div>
   <textarea id=stdout placeholder="stdout is empty" readonly></textarea>
+  <textarea id=status placeholder="waiting for program to finish" readonly></textarea>
   <script>
 function encodeBase64(code) {
   return LZString.compressToBase64(code)
@@ -83,43 +103,10 @@ function decodeBase64(code) {
 const elt_code = document.querySelector("#code");
 const elt_run = document.querySelector("#run");
 const elt_stdout = document.querySelector("#stdout");
-const elt_stdin = document.querySelector("#stdin");
-const elt_stdin_e = document.querySelector("#stdin-enter");
-const elt_samples = document.querySelector("#samples");
+const elt_status = document.querySelector("#status");
 
-window.onload = () => {
-  /* changelog */
-  elt_code.placeholder = "Eso v0.0.4 (Unstable)\n\n* Data is now compressed in URI (using lz-string)";
-  
-  /* create code samples */
-  const code_samples = new Map();
-  
-  function createOp(name, code) {
-    const size = ""+(1+code_samples.size);
-    code_samples.set(size, code);
-    elt_samples.options.add(new Option(name, size));
-  }
-  createOp("Hello world", "¢ hello world\n72 101 108 108 111 44 32 87 111 114 108 100 33 13 ^&.[&$1-]v");
-  createOp("Factorial", "¢ factorial (x >= 0)\n? |^~+ ^1-[^&*1-]v #");
-  createOp("Truth-machine", "¢ truth-machine\n?~~ ^#[1#]");
-  createOp("Fibonacci sequence", "¢ fibonacci sequence\n0 1-1?|[&(:&^+^#10$)1-]vvv");
-  createOp("Factorial counting", "¢ factorial counting\n?|1+ ^[^ &&^4>:- ^# 33^$1-^$29+^$29-$ ^~+^1 -[^&*1-]v# 10$ 1-]vv");
-  
-  createOp("Random ASCII sequence", "¢ random ascii sequence\n1023[0 64[^@*:&+2/]v$ 1-]v");
-  createOp("Simple calculator", decodeBase64("EUAgzglgtgDgNgUxAYwIZ2QVzqgLgewCcAoY0OffGCAOwHNiBGEAbWJBFFTAGsREAZrgC0kACYJ2IRowBsAPQAkAVgDUSgJzClM7YtlalAdlnrFRvYzOMALGaOM9RgAzXne5ZbMGnG69ccdAGZrC2C3PRsAJj0o2WFFKQB-EHkAYkZnRI4pLl4QKgRCPAh8GikZBRUzQ0VdJR9jPx0AyxCdMLrmusD9aw8YpTiEqQBCVIA_VUcWADIAN0cAXXnUuqypXJBuPkIIOgALEXFJDkqlNU1LXsbFAA4omtivHUfjXpcIi5f9WqNuqw6XqMdp1Togr6KaKxeLZEApdKZOFbZAHBDIPiFYq4UrlDgALik8mhExYq1mACoQM4VkSbEFhKTyapqbSOMTPEyQLNhKz5nSLFzZgB6PmcEAIMD4EBiMoAclw4EwMBgREVAgoeDAUn5OQ4oDAB3wAHcQIRJdhcBVbMFLHYhk8lHczMo7jCEmkKs4lMj9ShEKhCOBcKgMdsaGJ-JQYFIyUtGMQlkA"));
-  createOp("Guess the number game", decodeBase64("EUAg5grgpgzjIBcAWUQDsIFsBGUBO4AhplAFCkCMIFAbANoB6AAgFQBcAZANQBMA9AF0AbiFAYc-RAHsQucNDhQAJuQAsokABsAlkNjlQ2tAjxSlEAMYJtUtJQAMAZgAkFCgHZX9iq4oBWBmdnRx5fGi9VLx8Q33tfTwp7AE5nJIAOKN9ImPTMylpfFMSKQNjg0NUUnITErziYvx8_epdaih4fN06PcucHSKSajOLekAYAYhAYxOH7P19Z7vnVcMTS8ipQADNNQjAQLakCKDQlIhJyOlIQDUIYAGsDo5AjAAcIBGvqAvbu0JHph1fN0atl_k54pk3AEgn4MjEvgB-MbjWoaV54IwIF5od6fG5fDhEhiqAB8AFoNEptFstvgThYyASbgwAH4MOhCL43UCvXYAT0kkFgMGUIExYCQ-Ju1CBXUh0whbgS3l8MKh9nq_x-9kiAO1cW53xVKVyIzc2VahplICJ9hYGhOZzAxFQMCktnwRo4XJu9mErM5RtA1LOaCk2OFijOEqlABoQBYpJhXoQ8EyZUaGAAfPgUXh8DQICB4NDoLC4AgwbRgMtYmT2EAACnJFAAlNRm-2jcGQBisYnk6nMe67Da3KtdZlpm0eolTYssr1EvNob0s5zvqvkqkVWlSiB_UJAyIzXMvI4D0ejeaKJEVl4-jbezAINgTIQrCBCKc-5jjOKUCYIQRhGPsOh6DA3pNhQlITFM2p6qq867l4q5tOebhxIkLiKrM6GLje_jOA-axBG2PY2hwDA8KSrKsg6oBOi8WxaLoqDaPA9hfNewikCeXy8v-kauiAUh6HgXy_MCCrgsMbhqmEwRWkpiRIdEBqQihuRSchd7LhQpo1PMcKjPBtSkEeQhAA"));
-  createOp("Uwuifier", "¢ uwuifier\n! ^&.[2> ^108-~11*+ ^114-~5*+ ^97-~^[v 97$45$ 0]vv $ 1-]1vv");
-  
-  elt_samples.onchange = () => {
-    elt_code.value = code_samples.get(elt_samples.value)??"";
-    elt_samples.value = "0";
-  }
-  elt_samples.value = "0";
-  
-  const url_params = new URLSearchParams(window.location.search);
-  const code_url = url_params.get("code");
-  if(code_url) elt_code.value = decodeBase64(code_url);
-}
+const elt_stdin = document.querySelector("#stdin");
+const elt_enter = document.querySelector("#stdin-enter");
 
 elt_run.onclick = async () => {
   if(hand_in) hand_in = null;
@@ -127,13 +114,12 @@ elt_run.onclick = async () => {
   const url_code = encodeBase64(elt_code.value);
   window.history.replaceState({}, "", "?code="+url_code);
   
-  elt_stdout.value = "";
-  elt_stdout.value = await eso(elt_code.value);
+  await runEso(elt_code.value);
 }
 
 /* hwndle input */
 let hand_in = null;
-elt_stdin_e.onclick = async () => {
+elt_enter.onclick = async () => {
   if(!hand_in) return;
   await hand_in(elt_stdin.value);
   elt_stdin.value = "";
@@ -141,79 +127,238 @@ elt_stdin_e.onclick = async () => {
   hand_in = null;
 }
 function prompt(stdout) {
-  const inpi = /\s|^/.test(stdout.at(-1)??"")?"":" ";
+  const inpi = /\S$/.test(stdout)?" ":"";
   elt_stdout.value = stdout+inpi+"[program is waiting for stdin]";
   // elt_run.disabled = true;
   return new Promise(res => hand_in = res);
 }
 
 /* eso interpreter */
-function tokenize(code) {
+function parseEso(code) {
+  // lexer phase
   const tokens = [];
-  
-  code = code.split("");
-  while(code.length) {
-    if(/\s/.test(code[0])) {
-      let i = 0;
-      while(i<code.length&&/\s/.test(code[i])) ++i;
-      code.splice(0, i);
-      continue;
-    }
-    if(code[0]==="¢") {
-      let i = 0;
-      while(i<code.length&&code[i]!=="\n") ++i;
-      if(code[i]==="\n") ++i;
-      code.splice(0, i);
-      continue;
-    }
-    if(/[0-9]/.test(code[0])) {
-      let i = 0;
-      while(i<code.length&&/[0-9]/.test(code[i])) ++i;
-      const val = code.splice(0, i).join("");
-      tokens.push({ type: "num", val });
-      continue;
-    }
-    if("$#!?+-*/%|~^v&:;.@><o".includes(code[0])) {
-      tokens.push({ type: code[0] });
-      code.splice(0, 1);
+  let idx = 0;
+  while(idx<code.length) {
+    // ignore
+    if(/\s/.test(code[idx])) {
+      while(idx<code.length && /\s/.test(code[idx])) ++idx;
       continue;
     }
     
-    if(code[0]==="[") {
-      code.splice(0, 1);
-      let i = 0, depth = 1;
-      while(i<code.length&&depth) {
-        if(code[i]==="[") ++depth;
-        else if(code[i]==="]") --depth;
-        ++i;
-      }
-      const body = "["+code.splice(0, i).join("");
-      if(depth) throw new Error("unmatched pair of brackets → "+body.slice(0, 20));
-      tokens.push({ type: "loop", body: tokenize(body.slice(1, -1)) });
+    // commentary
+    if(code[idx]==="¢") {
+      while(idx<code.length && code[idx]!=="\n") ++idx;
       continue;
     }
-    if(code[0]==="(") {
-      code.splice(0, 1);
-      let i = 0, depth = 1;
-      while(i<code.length&&depth) {
-        if(code[i]==="(") ++depth;
-        else if(code[i]===")") --depth;
-        ++i;
+    
+    // number
+    if(/[0-9]/.test(code[idx])) {
+      let start = idx, raw = "";
+      while(idx<code.length && /[0-9]/.test(code[idx])) {
+        raw += code[idx++];
       }
-      const body = "("+code.splice(0, i).join("");
-      if(depth) throw new Error("unmatched pair of parenthesis → "+body.slice(0, 20));
-      tokens.push({ type: "group", body: tokenize(body.slice(1, -1)) });
+      tokens.push({
+        type: "num", raw,
+        value: BigInt(raw),
+        start, end: idx
+      });
       continue;
     }
-    throw new Error("invalid symbol → "+code[0]);
+    
+    // string
+    if(code[idx]==='"') {
+      let start = idx++, value = "";
+      while(idx<code.length && code[idx]!=='"') {
+        if(code[idx]==="\\") {
+          ++idx;
+          if(idx>=code.length) {
+            throw new SyntaxError(
+              "expected character after backslash escape but the input ended → "
+                +code.slice(start, idx)
+            );
+          }
+          if(code[idx]==="n") value += "\n";
+          else if(code[idx]==="t") value += "\t";
+          else value += code[idx];
+          ++idx;
+          continue;
+        }
+        value += code[idx++];
+      }
+      if(code[idx]!=='"') {
+        throw new SyntaxError(
+          "unmatched pair of quotation marks → "
+            +code.slice(start, idx)
+        );
+      }
+      tokens.push({
+        type: "str", raw: code.slice(start, ++idx),
+        value, start, end: idx
+      });
+      continue;
+    }
+    
+    // char (why didn't i added this before?)
+    if(code[idx]==="'") {
+      const start = idx++;
+      if(idx>code.length) {
+        throw new SyntaxError("expected character after ' but the input ended.");
+      }
+      tokens.push({
+        type: "char",
+        value: BigInt(code[idx].codePointAt(0)),
+        raw: code.slice(start, ++idx),
+        start, end: idx
+      });
+      continue;
+    }
+    
+    // operators
+    if("$#!?+-*/%~`^v&:;.@><o[]()".includes(code[idx])) {
+      const type = code[idx];
+      tokens.push({
+        type, raw: type,
+        start: idx, end: ++idx
+      });
+      continue;
+    }
+    
+    /*if(/[a-z]/.test(code[idx])) {
+      const raw = code[idx];
+      tokens.push({
+        type: "macro", raw,
+        start: idx, end: ++idx
+      });
+      continue;
+    }*/
+    
+    throw new SyntaxError("invalid symbol → "+code[idx]);
   }
-  return tokens;
+  
+  // parser phase
+  function parseToken() {
+    const next = tokens.shift();
+    
+    // loop
+    /*if(next.type==="="||next.type===";") {
+      throw new SyntaxError("macros are only allowed in the top-level and on the header.");
+    }*/
+    if(next.type==="[") {
+      const start = next.start;
+      
+      const body = [];
+      while(tokens.length && tokens[0].type!=="]") {
+        body.push(parseToken());
+      }
+      
+      let end = start+1;
+      if(!tokens.length) {
+        if(!body.length) end = start+1;
+        else end = body[body.length-1].end;
+      } else {
+        end = tokens[0].end;
+      }
+      
+      if(tokens.shift()?.type!=="]") {
+        throw new SyntaxError(
+          "unmatched pair of brackets → "
+            +code.slice(start, Math.min(20+start, end))
+        );
+      }
+      return {
+        type: "loop", body,
+        raw: code.slice(start, end),
+        start, end
+      };
+    }
+    
+    // group
+    if(next.type==="(") {
+      const start = next.start;
+      
+      const body = [];
+      while(tokens.length && tokens[0].type!==")") {
+        body.push(parseToken());
+      }
+      
+      let end;
+      if(!tokens.length) {
+        if(!body.length) end = start+1;
+        else end = body[body.length-1].end;
+      } else {
+        end = tokens[0].end;
+      }
+      
+      if(tokens.shift()?.type!==")") {
+        throw new SyntaxError(
+          "unmatched pair of parenthesesis → "
+            +code.slice(start, Math.min(20+start, end))
+        );
+      }
+      return {
+        type: "group", body,
+        value: code.slice(start, end),
+        start, end
+      };
+    }
+    
+    return next;
+  }
+  const parsed = [];
+  
+  /*while(tokens.length && tokens[0].type==="=") {
+    const start = tokens.shift().start;
+    
+    // macro name
+    if(!tokens.length) {
+      throw new SyntaxError("expected macro symbol but the input ended.");
+    }
+    let name = tokens.shift();
+    if(name.type!=="macro") {
+      throw new SyntaxError(`expected macro symbol but received '${name.raw.slice(0, 20)}'`);
+    }
+    if(!tokens.length) {
+      throw new SyntaxError(`expected a group for macro '${name.raw}' body but the input ended.`);
+    }
+    name = name.raw;
+    
+    // macro bodg
+    const body = [];
+    while(tokens.length && tokens[0].type!==";") {
+      body.push(parseToken());
+    }
+    
+    let end;
+    if(!tokens.length) {
+      if(!body.length) end = start+1;
+      else end = body[body.length-1].end;
+    } else {
+      end = tokens[0].end;
+    }
+    
+    if(tokens.shift()?.type!==";") {
+      throw new SyntaxError(
+        "unterminated macro body → "
+          +code.slice(start, Math.min(20+start, end))
+      );
+    }
+    
+    const raw = code.slice(start, end);
+    parsed.push({
+      type: "macro_def", raw,
+      name, body,
+      start, end
+    });
+  }*/
+  
+  while(tokens.length) {
+    parsed.push(parseToken());
+  }
+  
+  return parsed;
 }
 
-async function eso(code) {
-  let stdout = "", popst = [];
-  const stack = [];
-  
+async function runEso(code) {
   function binop(i) {
     if(stack.length<2) {
       throw new Error("expected 2 operands for binary operation.");
@@ -228,17 +373,54 @@ async function eso(code) {
     stack[l] = i(stack[l]);
   }
   
+  let stdout = "";
+  let popst = [];
+  const stack = [];
+
+  // const macros = new Map();
+  
   async function interpret(op) {
     switch(op.type) {
-      // language
+      // macros
+      /*case "macro": {
+        const f = macros.get(op.raw);
+        if(!f) {
+          throw new Error(`couldn't find a macro named '${op.raw}'`);
+        }
+        for(const op2 of f) {
+          await interpret(op2);
+        }
+        break;
+      }
+      case "macro_def": {
+        macros.set(op.name, op.body);
+        return;
+      }*/
+      
+      // literals
       case "num": {
-        stack.push(BigInt(parseInt(op.val)));
+        stack.push(op.value);
         return;
       }
+      case "str": {
+        stdout += op.value;
+        return;
+      }
+      case "char":
+        stack.push(op.value);
+        return;
+      
+      // flow
       case "loop": {
-        while(stack.length&&stack[stack.length-1]) {
-          for(const op2 of op.body)
+        let fuel = 0xffffff;
+        while(fuel && stack.length && stack[stack.length-1]) {
+          for(const op2 of op.body) {
             await interpret(op2);
+          }
+          --fuel;
+        }
+        if(!fuel) {
+          throw new Error("too many interactions → "+op.raw);
         }
         return;
       }
@@ -270,8 +452,9 @@ async function eso(code) {
           stack.push(0n);
           break;
         }
-        for(let i = 0; i<u.length; ++i) {
-          stack.push(BigInt(u.codePointAt(i)));
+        u = [...u];
+        for(const c of u) {
+          stack.push(BigInt(c.codePointAt(0)));
         }
         stack.push(BigInt(u.length));
         break;
@@ -303,8 +486,8 @@ async function eso(code) {
       case "*": binop((i, j) => i*j); break;
       case "/": binop((i, j) => j/i); break;
       case "%": binop((i, j) => j%i); break;
-      case "~": unaop(i => i===0n?1n:0n); break;
-      case "|": unaop(i => i<0n?-i:i); break;
+      case "~": unaop(i => (i===0n) ? 1n : 0n); break;
+      case "`": unaop(i => (i<0n) ? (-1n) : ((i>0n) ? 1n : 0n)); break;
       
       // stack
       case "@":
@@ -344,7 +527,7 @@ async function eso(code) {
         const d1 = Number(stack.pop());
         const d2 = Number(stack.pop());
         const l = stack.length;
-        if(l+1<=d1||l+1<=d2||d1<1||d2<1||d1===d2) {
+        if(l+1<=d1 || l+1<=d2 || d1<1 || d2<1 || d1===d2) {
           throw new Error("can not swap at depth "+d1+" and "+d2);
         }
         const idx0 = l-d1, idx1 = l-d2;
@@ -389,21 +572,66 @@ async function eso(code) {
         stack.splice(l-depth, 0, stack.pop());
         break;
       }
+      default:
+        throw new SyntaxError("invalid symbol → "+op.raw);
     }
     if(popst.length) {
       stack.push(...popst.splice(0).reverse());
     }
   }
   
+  elt_status.style.color = "white";
+  elt_status.value = "";
   try {
-    for(const op of tokenize(code))
+    for(const op of parseEso(code)) {
       await interpret(op);
+    }
+    elt_status.value = "closed with stack at "+stack.length;
+    elt_status.style.color = stack.length
+      ? "khaki" : "palegreen";
   } catch(e) {
-    if(stdout.length) stdout += "\n\n――――――――――――――――――――\n\n";
-    return stdout+e.toString();
+    elt_status.value = e.toString();
+    elt_status.style.color = "orangered";
   }
-  if(stdout.length) stdout += "\n\n――――――――――――――――――――\n\n";
-  return stdout+"closed with stack at "+stack.length;
+  elt_stdout.value = stdout;
+}
+
+window.onload = () => {
+  /* changelog */
+  elt_code.placeholder = "Eso v0.5 (Unstable)\n\n\n- | (abs) removed in favor of ` (sign), use ^`* instead.\n\n- ] and ) will no longer close their pairs if they are in a comment\n\n- everything inside \"...\" will be printed (support for backslash escaping)\n\n- ' now inserts the next charactar as a unicode codepoint to the stack.\n\n- ` now turns the top of the stack into its signal.";
+  
+  /* create code samples */
+  const elt_samples = document.querySelector("#samples");
+  
+  const code_samples = new Map();
+  
+  function createOp(name, code) {
+    const size = ""+(1+code_samples.size);
+    code_samples.set(size, code);
+    elt_samples.options.add(new Option(name, size));
+  }
+  createOp("Hello, World!", "\"Hello, World!\"");
+  createOp("String scanner", "¢ string scanner\n! ^&. [&$ 1-]v");
+  createOp("Factorial", "¢ factorial\n? ^`1+~~*\n1:[^&*1-]v #");
+  createOp("Truth-machine", "¢ truth-machine\n?~~ ^#[1#]");
+  createOp("Fibonacci sequence", "¢ fibonacci sequence\n1 0 ?^`*[&(\n  ^#10$:&^+\n)1-]vvv");
+  createOp("Factorial counting", "¢ factorial counting\n?^`* 1+^[\n  &^^&-: ¢ reverse order\n  ^# \"! = \" 1:[^&*1-]v # 10$\n1-]vv");
+  createOp("Random ASCII sequence", "¢ random ascii sequence\n1023[0 64[^@*:&+2/]v$ 1-]v");
+  createOp("Simple calculator", decodeBase64("EUAgzglgtgDgNgUxAYwIZ2QVzqgLgewCcAoY0OffGYgRhAG1iQQAiXATxiVwAsk4eYEFQSFUAOwAmALlZMQAfhAA9AMQ0ADABJ58tp259hXMQUKyW8gIQr6ANxoBaegDIHjgLp2NXkKADuSOIICJLC4nDsILxIAGYQhGC4KDyoYsi4ovLKWpo6zHocXNFGhILGohIycsyKKurausygyHzIANYVphD44vLS2SAA5ABUII4AfvYgLgAUyi4gIwCUID52g0MA1ONTdjPzi1ur65uOu9NzC-MnXpsA9Bf7V4v3t_ugCGD4IJK9Q8kwJgYDAiMlYhQ8GB5BsCs1wDx8P4QIQvthcHpUUC4LgLCBVPJNDkdDC_CAAOZpABGqHJCGIHiAA"));
+  // createOp("Guess The Number Game", decodeBase64("EUAg5grgpgzjIBcAWUQDsIFsBGUBO4AhplAFCkCMIFAbANoB6AAgFQBcAZANQBMA9AF0AbiFAYc-RAHsQucNDhQAJuQAsokABsAlkNjkARJFjxkqcbgK4EAdyhQ01EITRKQAZh4BCUgE8pECBIhHogBiAMAMRhWrqwAHQAOmjJBuRUoABmmoRgIJlSBA5uYMRkpHSkIGEIvgAOqP4QBMZwbGFVIAD8EZEUAAwAJJ2dHGMMqgB8ALQaStqZmfgOAMZk1Z0MAH4MdEKd1QZN8ibKiCjoWJZeadXVY_0sGsVEJCAwUlJo-AcgHPvVfrCLZ7X6geZuNBSBAnRRuPDaMBIBAAGhAKykmDqhDw6zuvwYDAABiw-BReHwNJhCHVpCBphR2v00YzqL8wSA6gi0DCMVicdoPmhfgYzJcJARBR07hE9mEYNTNJpwkChCCRAZsIiwCrhCL8Ek0GkOTAINgEHhCCsYS43FztDyQLjqQ6HXkdHoYL8OAAKCizKIxZ2EV1od1xGCG1IASnZMo4DB4ky2WyeoBeC1ioSl_U6qtIevVnSOAS0UhgCC8yTFFkkNkIMHa4UDA2GqqEQA"));
+  createOp("Roman numeral to arabic numeral", decodeBase64("IQAgRSCGDODWIFdoFMBOICWA7ADggLgFCEAM4I0CAtqeQDYz4gBukdCyxAzAHwDaAMgAUvYmQjYM-DGxZsOIIdhABjGMhBYA9lg1aAZiHwALDSp0ATKRh3QoAIy3MNGO_lQcAlIWEA9AOQAsgC0AH6eAFx8zCwAjCQJICQAusw-QgEAImGR0SwArIlJqekBAMI5UTHM8WTFaX7-ADKVecyFIJ0pDRn-ABqt1fGd9aX-AGqDBSOjjQCSUzUz3T4xEKjIVE4aJmbGkOjmFsg4WthM-qhaVEamFPiQKrDEEoYqCKgbWEw8ALwgDGgTF2WCgFgsRi0tw0lCoABoKAh7O5HkwtLtUAB3VycAS-ABMPDxhJAwQABrEANT4gD0IF8eT8ABYeBFglwADyeeqhBkxZmsymc7ndNI-EgAKl8AkpawoyCYgKYrHYOyhu1UHy-yvknE8sWCqTSAGJyNBjFpMdDEVQg"));
+  createOp("Arabic numeral to roman numeral", decodeBase64("PwAgRSCGDODWIFdoFMBOICWA7ADggLgFCEB6AjAAxUD0A2gEQCy9IIAZJVQLQhlcC6AN1IBOGiAYBhZuzEUevAcJIBWcQwAiLdmvms-Q0gBZ19SVvYm9iw6U7UJZ7R276loig8cANSSzZiCjbKal4MADLOakEGyiZh9N6RltbBxOSerAzezpQx7iQiXo4AkjmyQWmqxQwAalGVscY19CX1lo3urN2l2j3dsUA"));
+  // createOp("Uwuifier", "¢ uwuifier\n! ^&.[2> ^108-~11*+ ^114-~5*+ ^97-~^[v 97$45$ 0]vv $ 1-]1vv");
+  
+  elt_samples.onchange = () => {
+    elt_code.value = code_samples.get(elt_samples.value)??"";
+    elt_samples.value = "0";
+  }
+  elt_samples.value = "0";
+  
+  const url_params = new URLSearchParams(window.location.search);
+  const code_url = url_params.get("code");
+  if(code_url) elt_code.value = decodeBase64(code_url);
 }
   </script>
 </body>
