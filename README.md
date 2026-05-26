@@ -16,7 +16,7 @@ When using the online interpreter, you can click and copy the URL as an alternat
   > `3 3 v` → `3`
 * `&` pops the top of stack, wait for a **valid** command to be executed and then push the stored items back into the top
   > `1 4 &3*` → `3 4`\
-  > `&` itself, `[...]`, `"..."`, `o` and `[0-9]+` are not valid commands\
+  > `&` itself, `[...]`, `"..."`, `o`, `@` and `[0-9]+` are not valid commands\
   > `&` can be stacked: `0 2 3 &&1+` → `1 2 3`
 * `:` flip the last 2 items on stack
   > `4 5 :` → `5 4`
