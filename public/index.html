@@ -135,37 +135,13 @@ function prompt(stdout) {
 
 /* eso interpreter */
 function parseEso(code) {
-  // lexer phase
-  const tokens = [];
   let idx = 0;
-  while(idx<code.length) {
-    // ignore
-    if(/\s/.test(code[idx])) {
-      while(idx<code.length && /\s/.test(code[idx])) ++idx;
-      continue;
-    }
-    
-    // commentary
+  function parseNext(tokens) {
     if(code[idx]==="¢") {
       while(idx<code.length && code[idx]!=="\n") ++idx;
-      continue;
+      return;
     }
     
-    // number
-    if(/[0-9]/.test(code[idx])) {
-      let start = idx, raw = "";
-      while(idx<code.length && /[0-9]/.test(code[idx])) {
-        raw += code[idx++];
-      }
-      tokens.push({
-        type: "num", raw,
-        value: BigInt(raw),
-        start, end: idx
-      });
-      continue;
-    }
-    
-    // string
     if(code[idx]==='"') {
       let start = idx++, value = "";
       while(idx<code.length && code[idx]!=='"') {
@@ -185,224 +161,116 @@ function parseEso(code) {
         }
         value += code[idx++];
       }
+      const raw = code.slice(start, idx+1);
       if(code[idx]!=='"') {
-        throw new SyntaxError(
-          "unmatched pair of quotation marks → "
-            +code.slice(start, idx)
-        );
+        throw new SyntaxError("unmatched pair of quotation marks → "+raw);
       }
-      tokens.push({
-        type: "str", raw: code.slice(start, ++idx),
-        value, start, end: idx
-      });
-      continue;
+      ++idx;
+      tokens.push({ type: "string", raw, value });
+      return;
     }
     
-    // char (why didn't i added this before?)
     if(code[idx]==="'") {
-      const start = idx++;
-      if(idx>code.length) {
-        throw new SyntaxError("expected character after ' but the input ended.");
+      ++idx;
+      if(idx>=code.length) {
+        throw new SyntaxError("expected character after ' but the input ended");
       }
-      tokens.push({
-        type: "char",
-        value: BigInt(code[idx].codePointAt(0)),
-        raw: code.slice(start, ++idx),
-        start, end: idx
-      });
-      continue;
+      const char = code[idx++];
+      tokens.push({ type: "char", value: BigInt(char.codePointAt(0)), raw: "'"+char });
+      return;
     }
     
-    // operators
-    if("$#!?+-*/%~`^v&:;.@><o[]()".includes(code[idx])) {
+    if(code[idx]==="[") {
+      const start = idx++;
+      
+      const body = [];
+      while(idx<code.length && code[idx]!=="]") {
+        parseNext(body);
+      }
+      const raw = code.slice(start, idx+1);
+      if(code[idx]!=="]") {
+        throw new SyntaxError("unmatched pair of brackets → "+raw);
+      }
+      ++idx;
+      tokens.push({ type: "loop", body, raw });
+      return;
+    }
+    
+    if(code[idx]==="(") {
+      const start = idx++;
+      
+      const body = [];
+      while(idx<code.length && code[idx]!==")") {
+        parseNext(body);
+      }
+      const raw = code.slice(start, idx+1);
+      if(code[idx]!==")") {
+        throw new SyntaxError("unmatched pair of parenthesis → "+raw);
+      }
+      ++idx;
+      tokens.push({ type: "group", body, raw });
+      return;
+    }
+    
+    if(/\s/.test(code[idx])) {
+      ++idx;
+      return;
+    }
+    
+    if(/[0-9]/.test(code[idx])) {
+      let raw = "";
+      while(idx<code.length && /[0-9]/.test(code[idx])) {
+        raw += code[idx++];
+      }
+      tokens.push({ type: "number", raw, value: BigInt(raw) });
+      return;
+    }
+    
+    if("$#!?+-*/%~`^v&:;.@><o".includes(code[idx])) {
       const type = code[idx];
       tokens.push({
         type, raw: type,
         start: idx, end: ++idx
       });
-      continue;
+      return;
     }
-    
-    /*if(/[a-z]/.test(code[idx])) {
-      const raw = code[idx];
-      tokens.push({
-        type: "macro", raw,
-        start: idx, end: ++idx
-      });
-      continue;
-    }*/
     
     throw new SyntaxError("invalid symbol → "+code[idx]);
   }
   
-  // parser phase
-  function parseToken() {
-    const next = tokens.shift();
-    
-    // loop
-    /*if(next.type==="="||next.type===";") {
-      throw new SyntaxError("macros are only allowed in the top-level and on the header.");
-    }*/
-    if(next.type==="[") {
-      const start = next.start;
-      
-      const body = [];
-      while(tokens.length && tokens[0].type!=="]") {
-        body.push(parseToken());
-      }
-      
-      let end = start+1;
-      if(!tokens.length) {
-        if(!body.length) end = start+1;
-        else end = body[body.length-1].end;
-      } else {
-        end = tokens[0].end;
-      }
-      
-      if(tokens.shift()?.type!=="]") {
-        throw new SyntaxError(
-          "unmatched pair of brackets → "
-            +code.slice(start, Math.min(20+start, end))
-        );
-      }
-      return {
-        type: "loop", body,
-        raw: code.slice(start, end),
-        start, end
-      };
-    }
-    
-    // group
-    if(next.type==="(") {
-      const start = next.start;
-      
-      const body = [];
-      while(tokens.length && tokens[0].type!==")") {
-        body.push(parseToken());
-      }
-      
-      let end;
-      if(!tokens.length) {
-        if(!body.length) end = start+1;
-        else end = body[body.length-1].end;
-      } else {
-        end = tokens[0].end;
-      }
-      
-      if(tokens.shift()?.type!==")") {
-        throw new SyntaxError(
-          "unmatched pair of parenthesesis → "
-            +code.slice(start, Math.min(20+start, end))
-        );
-      }
-      return {
-        type: "group", body,
-        value: code.slice(start, end),
-        start, end
-      };
-    }
-    
-    return next;
+  const tokens = [];
+  while(idx<code.length) {
+    parseNext(tokens);
   }
-  const parsed = [];
-  
-  /*while(tokens.length && tokens[0].type==="=") {
-    const start = tokens.shift().start;
-    
-    // macro name
-    if(!tokens.length) {
-      throw new SyntaxError("expected macro symbol but the input ended.");
-    }
-    let name = tokens.shift();
-    if(name.type!=="macro") {
-      throw new SyntaxError(`expected macro symbol but received '${name.raw.slice(0, 20)}'`);
-    }
-    if(!tokens.length) {
-      throw new SyntaxError(`expected a group for macro '${name.raw}' body but the input ended.`);
-    }
-    name = name.raw;
-    
-    // macro bodg
-    const body = [];
-    while(tokens.length && tokens[0].type!==";") {
-      body.push(parseToken());
-    }
-    
-    let end;
-    if(!tokens.length) {
-      if(!body.length) end = start+1;
-      else end = body[body.length-1].end;
-    } else {
-      end = tokens[0].end;
-    }
-    
-    if(tokens.shift()?.type!==";") {
-      throw new SyntaxError(
-        "unterminated macro body → "
-          +code.slice(start, Math.min(20+start, end))
-      );
-    }
-    
-    const raw = code.slice(start, end);
-    parsed.push({
-      type: "macro_def", raw,
-      name, body,
-      start, end
-    });
-  }*/
-  
-  while(tokens.length) {
-    parsed.push(parseToken());
-  }
-  
-  return parsed;
+  return tokens;
 }
 
 async function runEso(code) {
   function binop(i) {
     if(stack.length<2) {
-      throw new Error("expected 2 operands for binary operation.");
+      throw new Error("expected 2 operands to do binary operation");
     }
-    stack.push(i(stack.pop(), stack.pop()));
+    const right = stack.pop();
+    const left = stack.pop();
+    stack.push(i(left, right));
   }
   function unaop(i) {
     if(stack.length<1) {
-      throw new Error("expected a value for unary operation.");
+      throw new Error("expected a value to do unary operation");
     }
     const l = stack.length-1;
     stack[l] = i(stack[l]);
   }
   
-  let stdout = "";
-  let popst = [];
-  const stack = [];
-
-  // const macros = new Map();
-  
+  let stdout = "", stored = [], stack = [];
   async function interpret(op) {
     switch(op.type) {
-      // macros
-      /*case "macro": {
-        const f = macros.get(op.raw);
-        if(!f) {
-          throw new Error(`couldn't find a macro named '${op.raw}'`);
-        }
-        for(const op2 of f) {
-          await interpret(op2);
-        }
-        break;
-      }
-      case "macro_def": {
-        macros.set(op.name, op.body);
-        return;
-      }*/
-      
       // literals
-      case "num": {
+      case "number": {
         stack.push(op.value);
         return;
       }
-      case "str": {
+      case "string": {
         stdout += op.value;
         return;
       }
@@ -425,13 +293,12 @@ async function runEso(code) {
         return;
       }
       case "group": {
-        let i = 1, j = popst.length+1;
-        const backup = popst;
-        popst = [];
+        const backup = stored;
+        stored = [];
         for(const op2 of op.body) {
           await interpret(op2);
         }
-        popst = backup;
+        stored = backup;
         break;
       }
       
@@ -466,7 +333,7 @@ async function runEso(code) {
           stdout += stack.pop();
           break;
         }
-        throw new Error("expected value to print.");
+        throw new Error("expected number to print");
       }
       case "o": {
         stdout += stack.join(" ");
@@ -477,17 +344,27 @@ async function runEso(code) {
           stdout += String.fromCodePoint(Number(stack.pop()));
           break;
         }
-        throw new Error("expected value to print.");
+        throw new Error("expected codepoint to print");
       }
       
       // operations
       case "+": binop((i, j) => i+j); break;
-      case "-": binop((i, j) => j-i); break;
+      case "-": binop((i, j) => i-j); break;
       case "*": binop((i, j) => i*j); break;
-      case "/": binop((i, j) => j/i); break;
-      case "%": binop((i, j) => j%i); break;
+      case "/": binop((i, j) => {
+        if(j===0n) {
+          throw new Error("can't divide by 0");
+        }
+        return i/j;
+      }); break;
+      case "%": binop((i, j) => {
+        if(j===0n) {
+          throw new Error("can't divide by 0");
+        }
+        return i%j;
+      }); break;
       case "~": unaop(i => (i===0n) ? 1n : 0n); break;
-      case "`": unaop(i => (i<0n) ? (-1n) : ((i>0n) ? 1n : 0n)); break;
+      case "`": unaop(i => (i<0n) ? -1n : ((i>0n) ? 1n : 0n)); break;
       
       // stack
       case "@":
@@ -498,21 +375,21 @@ async function runEso(code) {
         break;
       case "&": {
         if(!stack.length) {
-          throw new Error("expected value to pop.");
+          throw new Error("can't pop empty stack");
         }
-        popst.push(stack.pop());
+        stored.push(stack.pop());
         return;
       }
       case "^": {
         if(!stack.length) {
-          throw new Error("expected value to duplicate.");
+          throw new Error("can't duplicate empty stack");
         }
         stack.push(stack[stack.length-1]);
         break;
       }
       case ":": {
         if(stack.length<2) {
-          throw new Error("expected at least 2 values to swap.");
+          throw new Error("expected at least 2 on stack to swap");
         }
         const l = stack.length-1;
         const u = stack[l];
@@ -522,13 +399,13 @@ async function runEso(code) {
       }
       case ";": {
         if(stack.length<2) {
-          throw new Error("expected at least 2 values.");
+          throw new Error("expected 2 depth value");
         }
         const d1 = Number(stack.pop());
         const d2 = Number(stack.pop());
         const l = stack.length;
         if(l+1<=d1 || l+1<=d2 || d1<1 || d2<1 || d1===d2) {
-          throw new Error("can not swap at depth "+d1+" and "+d2);
+          throw new Error("can't swap at depth "+d1+" and "+d2);
         }
         const idx0 = l-d1, idx1 = l-d2;
         const u = stack[idx0];
@@ -538,11 +415,11 @@ async function runEso(code) {
       }
       case ".": {
         if(!stack.length) {
-          throw new Error("expected value to reverse.");
+          throw new Error("expected reverse size on stack");
         }
         const size = Number(stack.pop());
         if(stack.length<size) {
-          throw new Error("expected "+size+" values to reverse.");
+          throw new Error("expected at least "+size+" on stack to reverse");
         }
         const original = stack.splice(stack.length-size, stack.length);
         stack.push(...original.reverse());
@@ -550,24 +427,24 @@ async function runEso(code) {
       }
       case ">": {
         if(!stack.length) {
-          throw new Error("expected value to depth.");
+          throw new Error("expected depth value");
         }
         const depth = Number(stack.pop());
         const l = stack.length;
         if(depth>l) {
-          throw new Error("expected at least "+depth+" to push up.");
+          throw new Error("expected at least "+depth+" on stack to push up");
         }
         stack.push(...stack.splice(l-depth, 1));
         break;
       }
       case "<": {
         if(!stack.length) {
-          throw new Error("expected value to depth.");
+          throw new Error("expected depth value");
         }
         const depth = Number(stack.pop());
         const l = stack.length;
         if(depth>l) {
-          throw new Error("expected at least "+depth+" to push down.");
+          throw new Error("expected at least "+depth+" on stack to push down");
         }
         stack.splice(l-depth, 0, stack.pop());
         break;
@@ -575,8 +452,8 @@ async function runEso(code) {
       default:
         throw new SyntaxError("invalid symbol → "+op.raw);
     }
-    if(popst.length) {
-      stack.push(...popst.splice(0).reverse());
+    if(stored.length) {
+      stack.push(...stored.splice(0).reverse());
     }
   }
   
@@ -598,7 +475,7 @@ async function runEso(code) {
 
 window.onload = () => {
   /* changelog */
-  elt_code.placeholder = "Eso v0.5 (Unstable)\n\n\n- | (abs) removed in favor of ` (sign), use ^`* instead.\n\n- ] and ) will no longer close their pairs if they are in a comment\n\n- everything inside \"...\" will be printed (support for backslash escaping)\n\n- ' now inserts the next charactar as a unicode codepoint to the stack.\n\n- ` now turns the top of the stack into its signal.";
+  elt_code.placeholder = "### eso v0.5.1 (unstable)\n- changed some error messages\n\n\n### eso v0.5 (unstable)\n- | (abs) removed in favor of ` (sign), use ^`* instead.\n\n- ] and ) will no longer close their pairs if they are in a comment\n\n- everything inside \"...\" will be printed (support for backslash escaping)\n\n- ' now inserts the next charactar as a unicode codepoint to the stack.\n\n- ` now turns the top of the stack into its signal.";
   
   /* create code samples */
   const elt_samples = document.querySelector("#samples");
