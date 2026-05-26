@@ -369,7 +369,7 @@ async function runEso(code) {
       // stack
       case "@":
         stack.push(BigInt((2*Math.random())|0));
-        break;
+        return;
       case "v":
         stack.pop();
         break;
@@ -475,7 +475,7 @@ async function runEso(code) {
 
 window.onload = () => {
   /* changelog */
-  elt_code.placeholder = "### eso v0.5.1 (unstable)\n- changed some error messages\n\n\n### eso v0.5 (unstable)\n- | (abs) removed in favor of ` (sign), use ^`* instead.\n\n- ] and ) will no longer close their pairs if they are in a comment\n\n- everything inside \"...\" will be printed (support for backslash escaping)\n\n- ' now inserts the next charactar as a unicode codepoint to the stack.\n\n- ` now turns the top of the stack into its signal.";
+  elt_code.placeholder = "### eso v0.5.1 (unstable)\n- changed some error messages\n\n- bugfix: @ is not a valid operation for & anymore\n\n\n### eso v0.5 (unstable)\n- | (abs) removed in favor of ` (sign), use ^`* instead.\n\n- ] and ) will no longer close their pairs if they are in a comment\n\n- everything inside \"...\" will be printed (support for backslash escaping)\n\n- ' now inserts the next charactar as a unicode codepoint to the stack.\n\n- ` now turns the top of the stack into its signal.";
   
   /* create code samples */
   const elt_samples = document.querySelector("#samples");
