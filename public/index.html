@@ -1,3 +1,23 @@
+<!--
+  ### eso v0.5.2 (unstable)
+  - added macros, try it by using \ followed by a character and a tab or a space,
+    everything after that will be interpreted as the body of the macro until
+    the end of the line.
+  
+  - [technical] prompt(...) Promise is now being rejected if the program is
+    reseted.
+  
+  ### eso v0.5.1 (unstable)
+  - changed some error messages
+  - bugfix: @ is not a valid operation for & anymore    
+  
+  ### eso v0.5 (unstable)
+  - | (abs) removed in favor of ` (sign), use ^`* instead.
+  - ] and ) will no longer close their pairs if they are in a comment
+  - everything inside \"...\" will be printed (support for backslash escaping)
+  - ' now inserts the next charactar as a unicode codepoint to the stack.
+  - ` now turns the top of the stack into its signal.
+-->
 <!DOCTYPE html>
 <html lang=en>
 <head>
@@ -109,7 +129,10 @@ const elt_stdin = document.querySelector("#stdin");
 const elt_enter = document.querySelector("#stdin-enter");
 
 elt_run.onclick = async () => {
-  if(hand_in) hand_in = null;
+  if(hand_in) {
+    hand_in.rej("out input");
+    hand_in = null;
+  }
   
   const url_code = encodeBase64(elt_code.value);
   window.history.replaceState({}, "", "?code="+url_code);
@@ -121,20 +144,25 @@ elt_run.onclick = async () => {
 let hand_in = null;
 elt_enter.onclick = async () => {
   if(!hand_in) return;
-  await hand_in(elt_stdin.value);
+  await hand_in.res(elt_stdin.value);
   elt_stdin.value = "";
   // elt_run.disabled = false;
+  hand_in.rej("out input");
   hand_in = null;
 }
 function prompt(stdout) {
   const inpi = /\S$/.test(stdout)?" ":"";
   elt_stdout.value = stdout+inpi+"[program is waiting for stdin]";
   // elt_run.disabled = true;
-  return new Promise(res => hand_in = res);
+  return new Promise((res, rej) => hand_in = { res, rej });
 }
 
 /* eso interpreter */
 function parseEso(code) {
+  const valid_syms = "$#!?+-*/%~`^v&:;.@><o";
+  const all_valid_syms = valid_syms+"¢[]()0123456789\"'\\";
+  const macros = new Map();
+  
   let idx = 0;
   function parseNext(tokens) {
     if(code[idx]==="¢") {
@@ -176,7 +204,7 @@ function parseEso(code) {
         throw new SyntaxError("expected character after ' but the input ended");
       }
       const char = code[idx++];
-      tokens.push({ type: "char", value: BigInt(char.codePointAt(0)), raw: "'"+char });
+      tokens.push({ type: "number", value: BigInt(char.codePointAt(0)), raw: "'"+char });
       return;
     }
     
@@ -212,26 +240,29 @@ function parseEso(code) {
       return;
     }
     
-    if(/\s/.test(code[idx])) {
-      ++idx;
-      return;
-    }
-    
-    if(/[0-9]/.test(code[idx])) {
+    if(code[idx]>="0" && code[idx]<="9") {
       let raw = "";
-      while(idx<code.length && /[0-9]/.test(code[idx])) {
+      while(idx<code.length && (code[idx]>="0" && code[idx]<="9")) {
         raw += code[idx++];
       }
-      tokens.push({ type: "number", raw, value: BigInt(raw) });
+      tokens.push({ type: "number", raw, value: BigInt(raw), raw });
       return;
     }
     
-    if("$#!?+-*/%~`^v&:;.@><o".includes(code[idx])) {
-      const type = code[idx];
-      tokens.push({
-        type, raw: type,
-        start: idx, end: ++idx
-      });
+    if(valid_syms.includes(code[idx])) {
+      const type = code[idx++];
+      tokens.push({ type, raw: type });
+      return;
+    }
+    
+    if(macros.has(code[idx])) {
+      const body = macros.get(code[idx++]);
+      tokens.push({ type: "group", body });
+      return;
+    }
+    
+    if(/\s/.test(code[idx])) {
+      ++idx;
       return;
     }
     
@@ -239,6 +270,45 @@ function parseEso(code) {
   }
   
   const tokens = [];
+  
+  // macro definition finding
+  while(idx<code.length) {
+    if(code[idx]==="¢") {
+      parseNext();
+      continue;
+    }
+    if(code[idx]==="\\") {
+      const start = idx++;
+      if(idx>=code.length) {
+        throw new SyntaxError("expected character after \\ but the input ended");
+      }
+      const sym = code[idx++];
+      if(all_valid_syms.includes(sym) || macros.has(sym)) {
+        throw new SyntaxError(sym+" can't be a macro symbol as it's already being used");
+      }
+      if(/\s/.test(sym)) {
+        throw new SyntaxError("the macro symbol can't be a whitespace");
+      }
+      if(code[idx]!=="\t" && code[idx]!==" ") {
+        throw new SyntaxError("there should be a tab or a space between the macro symbol and its body");
+      }
+      ++idx;
+      const body = [];
+      while(idx<code.length && code[idx]!=="\n") {
+        parseNext(body);
+      }
+      ++idx;
+      macros.set(sym, body);
+      continue;
+    }
+    if(/\s/.test(code[idx])) {
+      ++idx;
+      continue;
+    }
+    break;
+  }
+  
+  // actual parser
   while(idx<code.length) {
     parseNext(tokens);
   }
@@ -262,10 +332,11 @@ async function runEso(code) {
     stack[l] = i(stack[l]);
   }
   
-  let stdout = "", stored = [], stack = [];
+  let stdout = "", stored = [];
+  const stack = [];
   async function interpret(op) {
     switch(op.type) {
-      // literals
+      // language
       case "number": {
         stack.push(op.value);
         return;
@@ -274,14 +345,11 @@ async function runEso(code) {
         stdout += op.value;
         return;
       }
-      case "char":
-        stack.push(op.value);
-        return;
       
       // flow
       case "loop": {
         let fuel = 0xffffff;
-        while(fuel && stack.length && stack[stack.length-1]) {
+        while(fuel && stack[stack.length-1]) {
           for(const op2 of op.body) {
             await interpret(op2);
           }
@@ -298,6 +366,9 @@ async function runEso(code) {
         for(const op2 of op.body) {
           await interpret(op2);
         }
+        /*if(stored.length) {
+          throw new SyntaxError("groups must consume theirs stored stacks → "+op.raw);
+        }*/
         stored = backup;
         break;
       }
@@ -308,13 +379,19 @@ async function runEso(code) {
         try {
           u = BigInt(await prompt(stdout));
         } catch(e) {
+          if(e==="out input") throw e;
           u = 0n;
         }
         stack.push(u);
         break;
       }
       case "!": {
-        let u = await prompt(stdout);
+        let u;
+        try {
+          u = await prompt(stdout);
+        } catch(e) {
+          if(e==="out input") throw e;
+        }
         if(!u.length) {
           stack.push(0n);
           break;
@@ -457,16 +534,14 @@ async function runEso(code) {
     }
   }
   
-  elt_status.style.color = "white";
-  elt_status.value = "";
   try {
     for(const op of parseEso(code)) {
       await interpret(op);
     }
     elt_status.value = "closed with stack at "+stack.length;
-    elt_status.style.color = stack.length
-      ? "khaki" : "palegreen";
+    elt_status.style.color = stack.length ? "khaki" : "palegreen";
   } catch(e) {
+    if(e==="out input") return;
     elt_status.value = e.toString();
     elt_status.style.color = "orangered";
   }
@@ -475,7 +550,8 @@ async function runEso(code) {
 
 window.onload = () => {
   /* changelog */
-  elt_code.placeholder = "### eso v0.5.1 (unstable)\n- changed some error messages\n\n- bugfix: @ is not a valid operation for & anymore\n\n\n### eso v0.5 (unstable)\n- | (abs) removed in favor of ` (sign), use ^`* instead.\n\n- ] and ) will no longer close their pairs if they are in a comment\n\n- everything inside \"...\" will be printed (support for backslash escaping)\n\n- ' now inserts the next charactar as a unicode codepoint to the stack.\n\n- ` now turns the top of the stack into its signal.";
+  elt_code.placeholder = "### eso v0.5.2 (unstable)\n\n- added macros, try it by using \\ followed by a character and a tab or a space, everything after that will be interpreted as the body of the macro until the end of the line.\n\n- [technical] prompt(...) Promise is now being rejected if the program is reseted.";
+  elt_code.placeholder += "\n\n\n- view source for complete changelog.";
   
   /* create code samples */
   const elt_samples = document.querySelector("#samples");
