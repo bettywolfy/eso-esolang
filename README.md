@@ -60,4 +60,16 @@ When using the online interpreter, you can click and copy the URL as an alternat
   > `'B` → `66`\
   > `'+` → `43`
 
+## macros
+Macros are a way to repeat actions without repeating code, each macro is treated as a group `(...)`, so macros are valid operations for `&`
+
+### defining new macros
+You can define macros in the first lines of your code, before any piece of actual code\
+Start by typing a `\` in your code, followed by a non-whitespace character that is not being used already, followed by a tab/space, et voilá! everything after this until the end of the you line will be the macro body
+```eso
+\s ^*
+3 s # ¢ 9
+```
+The first line defines `s` as the macro `^*`, whenever the character `s` is found in your code, `(^*)` will be executed. writing `3 (^*) #` would have the same effect.
+
 *Work in Progress.*
