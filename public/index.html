@@ -348,15 +348,10 @@ async function runEso(code) {
       
       // flow
       case "loop": {
-        let fuel = 0xffffff;
-        while(fuel && stack[stack.length-1]) {
+        while(stack[stack.length-1]) {
           for(const op2 of op.body) {
             await interpret(op2);
           }
-          --fuel;
-        }
-        if(!fuel) {
-          throw new Error("too many interactions → "+op.raw);
         }
         return;
       }
