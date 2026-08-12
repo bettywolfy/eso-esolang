@@ -1,4 +1,7 @@
 <!--
+  ### bolt v0.5.2 (unstable)
+  - eso renamed to bolt.
+  
   ### eso v0.5.2 (unstable)
   - added macros, try it by using \ followed by a character and a tab or a space,
     everything after that will be interpreted as the body of the macro until
@@ -25,7 +28,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js" integrity="sha512-qtX0GLM3qX8rxJN1gyDfcnMFFrKvixfoEOwbBib9VafR5vbChV5LeE5wSI/x+IlCkTY5ZFddFDCCfaVJJNnuKQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <title>Eso Interpreter</title>
+  <title>Bolt Interpreter</title>
   <style>
 :root {
   color-scheme: dark;
@@ -137,7 +140,7 @@ elt_run.onclick = async () => {
   const url_code = encodeBase64(elt_code.value);
   window.history.replaceState({}, "", "?code="+url_code);
   
-  await runEso(elt_code.value);
+  await runCode(elt_code.value);
 }
 
 /* hwndle input */
@@ -157,8 +160,8 @@ function prompt(stdout) {
   return new Promise((res, rej) => hand_in = { res, rej });
 }
 
-/* eso interpreter */
-function parseEso(code) {
+/* bolt interpreter */
+function parseCode(code) {
   const valid_syms = "$#!?+-*/%~`^v&:;.@><o";
   const all_valid_syms = valid_syms+"¢[]()0123456789\"'\\";
   const macros = new Map();
@@ -315,7 +318,7 @@ function parseEso(code) {
   return tokens;
 }
 
-async function runEso(code) {
+async function runCode(code) {
   function binop(i) {
     if(stack.length<2) {
       throw new Error("expected 2 operands to do binary operation");
@@ -530,7 +533,7 @@ async function runEso(code) {
   }
   
   try {
-    for(const op of parseEso(code)) {
+    for(const op of parseCode(code)) {
       await interpret(op);
     }
     elt_status.value = "closed with stack at "+stack.length;
@@ -545,7 +548,7 @@ async function runEso(code) {
 
 window.onload = () => {
   /* changelog */
-  elt_code.placeholder = "### eso v0.5.2 (unstable)\n\n- added macros, try it by using \\ followed by a character and a tab or a space, everything after that will be interpreted as the body of the macro until the end of the line.\n\n- [technical] prompt(...) Promise is now being rejected if the program is reseted.";
+  elt_code.placeholder = "### bolt v0.5.2 (unstable)\n\n- eso renamed to bolt.";
   elt_code.placeholder += "\n\n\n- view source for complete changelog.";
   
   /* create code samples */
